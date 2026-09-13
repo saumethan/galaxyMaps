@@ -2,7 +2,7 @@ This simple Wear OS app allows doing two things:
 * Downloading OSM maps of the whole world for offline use.
 * Importing GPX files into the watch, and displaying them on the map so you can follow them.
 
-![screenshot](screen.png)
+![screenshot](screenshot.png)
 
 This app is intended for hiking, trail running and other outdoor sports, so it has the following options:
 * Disabling touch input, to use in the rain or if a piece of clothing covers the screen (this also stops the screen from dimming while locked).
