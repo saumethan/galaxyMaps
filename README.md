@@ -23,6 +23,8 @@ There are two ways to get the app onto your watch: sideloading over ADB, or usin
 
 [Wear Installer 2](https://play.google.com/store/apps/details?id=org.freepoc.wearinstaller2) is a phone app that sideloads APKs onto a Wear OS watch over WiFi, without needing a PC or USB cable. Full tutorial:
 
+[YouTube Tutroial](https://www.youtube.com/watch?v=abgN4jQqHb0)
+
 1. **Install Wear Installer 2 on your phone** from the Play Store link above. Your watch needs its companion app (Galaxy Wearable, Wear OS by Google, etc.) already paired with your phone as normal.
 2. **Enable Developer Options on the watch**: on the watch, go to *Settings > About* and tap "Software version" (or "Build number") repeatedly until it says Developer Options are enabled.
 3. **Enable debugging on the watch**: go to *Settings > Developer options* and turn on:
