@@ -6,4 +6,9 @@
     <color name="white">#FFFFFF</color>
     <color name="black">#000000</color>
     <color name="translucent">#80000000</color>
+    <color name="accent">#3AC0FF</color>
+    <color name="icon_idle">#E6FFFFFF</color>
+    <color name="button_bg">#4D1A1A1A</color>
+    <color name="location_red">#FFE53935</color>
+    <color name="pointer_red">#FFFF3B30</color>
 </resources>

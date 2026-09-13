@@ -8,37 +8,72 @@
         android:id="@+id/mapView"
         android:layout_width="fill_parent"
         android:layout_height="fill_parent" />
-    <ImageButton
-        android:id="@+id/locationButton"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_alignRight="@id/mapView"
-        android:layout_alignParentBottom="false"
-        android:layout_centerHorizontal="false"
-        android:layout_centerVertical="true"
 
-        android:background="@color/red"
-        android:src="@drawable/ic_action_location_2" />
-    <ImageButton
-        android:id="@+id/screenLockButton"
+    <com.keeperrl.offlinemapsforwearos.CompassRingView
+        android:id="@+id/compassRing"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <View
+        android:id="@+id/touchLockOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone" />
+
+    <LinearLayout
+        android:id="@+id/rightButtonStack"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_alignRight="@id/mapView"
-        android:layout_marginRight="8sp"
+        android:layout_marginRight="24dp"
+        android:layout_centerVertical="true"
+        android:orientation="vertical"
+        android:gravity="center_horizontal">
+
+        <ImageButton
+            android:id="@+id/locationButton"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_marginBottom="8dp"
+            android:padding="7dp"
+            android:scaleType="fitCenter"
+            android:background="@drawable/circle_button_bg"
+            android:tint="@color/location_red"
+            android:visibility="gone"
+            android:src="@drawable/ic_action_location_2" />
+        <ImageButton
+            android:id="@+id/orientationButton"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:padding="7dp"
+            android:scaleType="fitCenter"
+            android:background="@drawable/circle_button_bg"
+            android:tint="@color/icon_idle"
+            android:src="@drawable/ic_compass_mode" />
+    </LinearLayout>
+
+    <ImageView
+        android:id="@+id/lockIndicator"
+        android:layout_width="26dp"
+        android:layout_height="26dp"
+        android:layout_centerHorizontal="true"
+        android:layout_alignParentBottom="true"
+        android:layout_marginBottom="64dp"
+        android:padding="4dp"
+        android:scaleType="fitCenter"
+        android:background="@drawable/circle_button_bg"
+        android:tint="@color/pointer_red"
+        android:src="@android:drawable/ic_lock_idle_lock"
         android:visibility="gone"
-        android:layout_marginTop="29sp"
-        android:layout_alignParentBottom="false"
-        android:layout_centerHorizontal="false"
-        android:layout_centerVertical="true"
-        android:layout_alignTop="@+id/locationButton"
-
-        android:background="@color/blue"
-        android:src="@drawable/ic_action_lock" />
+        android:contentDescription="@null" />
 
     <LinearLayout
         android:id="@+id/timerOverlay"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:paddingTop="18dp"
         android:gravity="top|center_horizontal"
         android:orientation="vertical">
 
@@ -47,7 +82,8 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:gravity="top|center_horizontal"
-        android:background="@color/black"
+        android:background="@drawable/pill_bg"
+        android:paddingHorizontal="4dp"
         android:orientation="vertical">
 
     <TextView
@@ -57,18 +93,17 @@
             android:clickable="true"
             android:gravity="center_horizontal"
             android:paddingHorizontal="5sp"
-            android:shadowColor="@color/white"
             android:text="00:00"
         android:visibility="invisible"
         android:height="5sp"
-            android:textColor="@color/white"
+            android:textColor="@color/icon_idle"
             android:textSize="28sp" />
 
         <LinearLayout
             android:id="@+id/timerOverlayUnder"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:background="@color/translucent"
+            android:paddingVertical="4dp"
             android:orientation="horizontal">
 
             <TextClock
@@ -78,11 +113,16 @@
                 android:gravity="center_horizontal"
                 android:layout_weight="1"
                 android:width="90sp"
-                android:shadowColor="@color/white"
                 android:format24Hour="hh:mm"
                 android:format12Hour="kk:mm"
-                android:textColor="@color/white"
+                android:textColor="@color/icon_idle"
                 android:textSize="14sp" />
+
+            <View
+                android:layout_width="1dp"
+                android:layout_height="16dp"
+                android:layout_gravity="center_vertical"
+                android:background="#40FFFFFF" />
 
             <TextView
                 android:id="@+id/batteryView"
@@ -90,10 +130,8 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:gravity="center_horizontal"
-                android:background="@color/black"
-                android:shadowColor="@color/white"
                 android:text="100%"
-                android:textColor="@color/white"
+                android:textColor="@color/icon_idle"
                 android:textSize="14sp" />
         </LinearLayout>
     </LinearLayout>
@@ -137,25 +175,17 @@
         </LinearLayout>
     </LinearLayout>
     <ImageButton
-        android:id="@+id/displayButton"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_alignLeft="@id/mapView"
-        android:layout_alignParentBottom="false"
-        android:layout_centerHorizontal="false"
-        android:layout_centerVertical="true"
-        android:layout_marginBottom="4dp"
-        android:background="@color/translucent"
-        android:src="@drawable/ic_action_sun" />
-    <ImageButton
         android:id="@+id/infoButton"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+        android:layout_width="30dp"
+        android:layout_height="30dp"
         android:layout_alignParentBottom="false"
         android:layout_centerHorizontal="true"
         android:layout_centerVertical="false"
-        android:layout_marginBottom="4dp"
-        android:background="@color/translucent"
-        android:src="@drawable/ic_action_info" />
+        android:layout_marginTop="20dp"
+        android:padding="5dp"
+        android:scaleType="fitCenter"
+        android:background="@drawable/circle_button_bg"
+        android:tint="@color/icon_idle"
+        android:src="@android:drawable/ic_menu_info_details" />
 
 </RelativeLayout>

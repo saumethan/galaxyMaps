@@ -15,6 +15,10 @@ import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.graphics.BitmapFactory;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
@@ -31,6 +35,7 @@ import android.view.Display;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
+import android.view.Surface;
 import android.view.View;
 import android.view.WindowManager;
 import android.webkit.MimeTypeMap;
@@ -132,7 +137,7 @@ import info.debatty.java.stringsimilarity.Levenshtein;
 import info.debatty.java.stringsimilarity.NGram;
 import info.debatty.java.stringsimilarity.QGram;
 
-public class MainActivity extends Activity implements LocationListener {
+public class MainActivity extends Activity implements LocationListener, SensorEventListener {
 
     protected MapView mapView;
     protected List<TileCache> tileCaches = new ArrayList<TileCache>();
@@ -169,6 +174,76 @@ public class MainActivity extends Activity implements LocationListener {
     private MyLocationOverlay myLocationOverlay;
     private MyLocationOverlay gpxLocationOverlay;
     private Location lastLocation = null;
+    private CompassRingView compassRingView;
+
+    private SensorManager sensorManager;
+    private Sensor rotationVectorSensor;
+    private final float[] rotationMatrix = new float[9];
+    private final float[] remappedRotationMatrix = new float[9];
+    private final float[] orientationAngles = new float[3];
+    private float smoothedHeading = 0f;
+    private boolean hasHeading = false;
+    private static final float HEADING_SMOOTHING = 0.15f;
+
+    private void createSensors() {
+        this.sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
+        this.rotationVectorSensor = this.sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR);
+    }
+
+    @Override
+    public void onSensorChanged(SensorEvent event) {
+        if (event.sensor.getType() != Sensor.TYPE_ROTATION_VECTOR)
+            return;
+        SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values);
+
+        int axisX = SensorManager.AXIS_X;
+        int axisY = SensorManager.AXIS_Y;
+        switch (((WindowManager) getSystemService(WINDOW_SERVICE)).getDefaultDisplay().getRotation()) {
+            case Surface.ROTATION_90:
+                axisX = SensorManager.AXIS_Y;
+                axisY = SensorManager.AXIS_MINUS_X;
+                break;
+            case Surface.ROTATION_180:
+                axisX = SensorManager.AXIS_MINUS_X;
+                axisY = SensorManager.AXIS_MINUS_Y;
+                break;
+            case Surface.ROTATION_270:
+                axisX = SensorManager.AXIS_MINUS_Y;
+                axisY = SensorManager.AXIS_X;
+                break;
+        }
+        SensorManager.remapCoordinateSystem(rotationMatrix, axisX, axisY, remappedRotationMatrix);
+        SensorManager.getOrientation(remappedRotationMatrix, orientationAngles);
+
+        float azimuthDegrees = (float) Math.toDegrees(orientationAngles[0]);
+        azimuthDegrees = (azimuthDegrees + 360) % 360;
+
+        if (!hasHeading) {
+            smoothedHeading = azimuthDegrees;
+            hasHeading = true;
+        } else {
+            float delta = ((azimuthDegrees - smoothedHeading + 540) % 360) - 180;
+            smoothedHeading = (smoothedHeading + delta * HEADING_SMOOTHING + 360) % 360;
+        }
+        mapView.setRotation(trackUp ? -smoothedHeading : 0f);
+        if (compassRingView != null)
+            compassRingView.setHeading(smoothedHeading);
+    }
+
+    private boolean trackUp = true;
+
+    private void setTrackUp(boolean trackUp) {
+        this.trackUp = trackUp;
+        mapView.setRotation(trackUp ? -smoothedHeading : 0f);
+        if (compassRingView != null)
+            compassRingView.setTrackUp(trackUp);
+        ImageButton orientationButton = findViewById(R.id.orientationButton);
+        orientationButton.setColorFilter(getResources().getColor(trackUp ? R.color.icon_idle : R.color.pointer_red));
+    }
+
+    @Override
+    public void onAccuracyChanged(Sensor sensor, int accuracy) {
+    }
 
     private void setLocation(Location location) {
         this.mapView.setCenter(new LatLong(location.getLatitude(), location.getLongitude()));
@@ -202,11 +277,10 @@ public class MainActivity extends Activity implements LocationListener {
     public void onLocationChanged(Location location) {
         this.myLocationOverlay.setPosition(location.getLatitude(), location.getLongitude(), location.getAccuracy());
         lastLocation = location;
-        ImageButton button = (ImageButton) findViewById(R.id.locationButton);
-        if (isLockedLocation()) {
+        if (followingLocation) {
             setLocation(location);
         }
-        button.setBackgroundColor(getResources().getColor(lockedLocation == Long.MAX_VALUE ? R.color.translucent : R.color.blue));
+        updateLocationButtonVisibility();
         if (currentTrack != null) {
             LatLong myPos = new LatLong(location.getLatitude(), location.getLongitude());
             double latLongMult = getLatLongMult(myPos);
@@ -248,22 +322,33 @@ public class MainActivity extends Activity implements LocationListener {
             view.setVisibility(View.GONE);
     }
 
-    @Override
-    public void onBackPressed() {
-        MapView mapView = findViewById(R.id.mapView);
-        boolean state = !mapView.isClickable();
-        mapView.setClickable(state);
-        findViewById(R.id.locationButton).setClickable(state);
-        findViewById(R.id.displayButton).setClickable(state);
-        findViewById(R.id.infoButton).setClickable(state);
-        toggleView(findViewById(R.id.screenLockButton));
+    private void updateLocationButtonVisibility() {
+        findViewById(R.id.locationButton).setVisibility(followingLocation ? View.GONE : View.VISIBLE);
     }
 
-    private long lockedLocation = Long.MIN_VALUE;
-    private boolean isLockedLocation() {
-        return lockedLocation < System.currentTimeMillis() - 2000;
+    private boolean touchLocked = false;
+
+    private void toggleTouchLock() {
+        touchLocked = !touchLocked;
+        boolean enabled = !touchLocked;
+        findViewById(R.id.mapView).setClickable(enabled);
+        findViewById(R.id.locationButton).setClickable(enabled);
+        findViewById(R.id.orientationButton).setClickable(enabled);
+        findViewById(R.id.infoButton).setClickable(enabled);
+        findViewById(R.id.touchLockOverlay).setVisibility(touchLocked ? View.VISIBLE : View.GONE);
+        findViewById(R.id.lockIndicator).setVisibility(touchLocked ? View.VISIBLE : View.GONE);
+        if (touchLocked)
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        else
+            getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
     }
-    private boolean displayOn = false;
+
+    @Override
+    public void onBackPressed() {
+        toggleTouchLock();
+    }
+
+    private boolean followingLocation = true;
     private Long timerStart = null;
 
     Handler timerHandler = new Handler();
@@ -301,17 +386,19 @@ public class MainActivity extends Activity implements LocationListener {
         locationButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                if (!isLockedLocation()) {
-                    lockedLocation = Long.MIN_VALUE;
-                    if (lastLocation != null) {
-                        locationButton.setBackgroundColor(getResources().getColor(R.color.blue));
-                        setLocation(lastLocation);
-                    }
-                } else {
-                    lockedLocation = Long.MAX_VALUE;
-                    ImageButton button = (ImageButton) findViewById(R.id.locationButton);
-                    button.setBackgroundColor(getResources().getColor(R.color.translucent));
-                }
+                // Button is only visible/tappable when the map is off-center, so a tap
+                // always means "recenter on my current location".
+                followingLocation = true;
+                if (lastLocation != null)
+                    setLocation(lastLocation);
+                updateLocationButtonVisibility();
+            }
+        });
+        ImageButton orientationButton = findViewById(R.id.orientationButton);
+        orientationButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                setTrackUp(!trackUp);
             }
         });
         ImageButton infoButton = findViewById(R.id.infoButton);
@@ -322,21 +409,6 @@ public class MainActivity extends Activity implements LocationListener {
                 toggleView(findViewById(R.id.trackOverlay));
                 if (currentTrack == null)
                     findViewById(R.id.trackOverlay).setVisibility(View.GONE);
-            }
-        });
-
-        ImageButton displayButton = (ImageButton) findViewById(R.id.displayButton);
-        displayButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                if (!displayOn) {
-                    getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-                    displayButton.setBackgroundColor(getResources().getColor(R.color.blue));
-                } else {
-                    getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-                    displayButton.setBackgroundColor(getResources().getColor(R.color.translucent));
-                }
-                displayOn = !displayOn;
             }
         });
     }
@@ -615,7 +687,12 @@ public class MainActivity extends Activity implements LocationListener {
         popupWindow.setOutsideTouchable(true);
         popupWindow.setFocusable(true);
         ListView listView = (ListView)popupView.findViewById(R.id.categories);
-        String[] elems = allMaps.keySet().toArray(new String[0]);
+        final DownloadInfo uk = findMapByName("great-britain");
+        refreshDownloadStatus(uk);
+        String[] groups = allMaps.keySet().toArray(new String[0]);
+        final String[] elems = new String[groups.length + 1];
+        elems[0] = uk.toString().replace("great-britain", "United Kingdom");
+        System.arraycopy(groups, 0, elems, 1, groups.length);
         ArrayAdapter<String> adapter =
                 new ArrayAdapter<String>(MainActivity.this,
                         R.layout.categoryelem, elems);
@@ -623,10 +700,68 @@ public class MainActivity extends Activity implements LocationListener {
         listView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
             public void onItemClick(AdapterView<?> adapterView, View view, int i, long l) {
-                downloadMapsAction(elems[i]);
+                if (i == 0) {
+                    popupWindow.dismiss();
+                    handleMapDownloadClick(uk, null, null);
+                } else {
+                    downloadMapsAction(elems[i]);
+                }
             }
         });
         popupWindow.showAsDropDown(mapView, 50, -30);
+    }
+
+    private DownloadInfo findMapByName(String name) {
+        for (DownloadInfo[] group : allMaps.values())
+            for (DownloadInfo d : group)
+                if (d.name.equals(name))
+                    return d;
+        throw new RuntimeException("Map not found: " + name);
+    }
+
+    private void refreshDownloadStatus(DownloadInfo... maps) {
+        for (DownloadInfo m : maps)
+            if (m.getDownloadedPath().exists())
+                m.setStatus(MapDownloadStatus.READY);
+        DownloadManager downloadManager = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
+        Cursor cursor = downloadManager.query(new DownloadManager.Query().setFilterByStatus(DownloadManager.STATUS_RUNNING));
+        if (cursor.moveToFirst()) {
+            do {
+                String uri = cursor.getString(cursor.getColumnIndex(DownloadManager.COLUMN_URI));
+                long id = cursor.getLong(cursor.getColumnIndex(DownloadManager.COLUMN_ID));
+                for (DownloadInfo m : maps)
+                    if (m.url.equals(uri))
+                        m.downloadId = id;
+            } while (cursor.moveToNext());
+        }
+        cursor.close();
+    }
+
+    private void handleMapDownloadClick(final DownloadInfo map, final ArrayAdapter adapter, final PopupWindow popupWindow) {
+        if (map.isFetching()) {
+            downloadingDialog(map.downloadId, map);
+        } else if (map.status == MapDownloadStatus.READY) {
+            multiMenu(Arrays.asList("Erase file"), Arrays.asList(new Runnable() {
+                @Override
+                public void run() {
+                    confirmationDialog("Erase " + map.name + "?", new Runnable() {
+                        @Override
+                        public void run() {
+                            map.getDownloadedPath().delete();
+                            if (adapter != null)
+                                adapter.notifyDataSetChanged();
+                            if (popupWindow != null)
+                                popupWindow.dismiss();
+                            reloadLayers();
+                        }
+                    });
+                }
+            }));
+        } else {
+            downloadMap(map);
+            if (adapter != null)
+                adapter.notifyDataSetChanged();
+        }
     }
     public enum MapDownloadStatus {
         ABSENT,
@@ -991,55 +1126,15 @@ public class MainActivity extends Activity implements LocationListener {
         popupWindow.setOutsideTouchable(true);
         popupWindow.setFocusable(true);
         ListView listView = (ListView)popupView.findViewById(R.id.categories);
-        DownloadManager.Query q = new DownloadManager.Query();
-        q.setFilterByStatus(DownloadManager.STATUS_RUNNING);
         DownloadInfo[] chosenMaps = allMaps.get(group);
-        for (int i = 0; i < chosenMaps.length; ++i) {
-            if (chosenMaps[i].getDownloadedPath().exists()) {
-                chosenMaps[i].setStatus(MapDownloadStatus.READY);
-            }
-        }
-        DownloadManager downloadManager = (DownloadManager)getSystemService(DOWNLOAD_SERVICE);
-        Cursor cursor = downloadManager.query(q);
-        if (cursor.moveToFirst()) {
-            do {
-                String uri = cursor.getString(cursor.getColumnIndex(DownloadManager.COLUMN_URI));
-                String path = cursor.getString(cursor.getColumnIndex(DownloadManager.COLUMN_LOCAL_URI));
-                long id = cursor.getLong(cursor.getColumnIndex(DownloadManager.COLUMN_ID));
-                for (int i = 0; i < chosenMaps.length; ++i)
-                    if (chosenMaps[i].url.equals(uri)) {
-                        chosenMaps[i].downloadId = id;
-                    }
-            } while (cursor.moveToNext());
-        }
+        refreshDownloadStatus(chosenMaps);
         mapDownloadsAdapter = new ArrayAdapter<DownloadInfo>(MainActivity.this,
                 R.layout.categoryelem, chosenMaps);
         listView.setAdapter(mapDownloadsAdapter);
         listView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
             public void onItemClick(AdapterView<?> adapterView, View view, int i, long l) {
-                if (chosenMaps[i].isFetching()) {
-                    downloadingDialog(chosenMaps[i].downloadId, chosenMaps[i]);
-                } else
-                if (chosenMaps[i].status == MapDownloadStatus.READY) {
-                    multiMenu(Arrays.asList("Erase file"), Arrays.asList(new Runnable() {
-                        @Override
-                        public void run() {
-                            confirmationDialog("Erase " + chosenMaps[i].name + "?", new Runnable() {
-                                        @Override
-                                        public void run() {
-                                            chosenMaps[i].getDownloadedPath().delete();
-                                            mapDownloadsAdapter.notifyDataSetChanged();
-                                            popupWindow.dismiss();
-                                            reloadLayers();
-                                        }
-                                    });
-                        }
-                    }));
-                } else {
-                    downloadMap(chosenMaps[i]);
-                    mapDownloadsAdapter.notifyDataSetChanged();
-                }
+                handleMapDownloadClick(chosenMaps[i], mapDownloadsAdapter, popupWindow);
             }
         });
         popupWindow.showAsDropDown(mapView, 50, -30);
@@ -1258,6 +1353,7 @@ public class MainActivity extends Activity implements LocationListener {
     }
 
     private void createLayers() {
+        compassRingView = findViewById(R.id.compassRing);
         Bitmap bitmap = new AndroidBitmap(BitmapFactory.decodeResource(getResources(), R.drawable.ic_maps_indicator_current_position));
         Marker marker = new Marker(null, bitmap, 0, 0);
         // circle to show the location accuracy (optional)
@@ -1280,13 +1376,16 @@ public class MainActivity extends Activity implements LocationListener {
         scaleBar.setScaleBarPosition(MapScaleBar.ScaleBarPosition.BOTTOM_CENTER);
         scaleBar.setScaleBarMode(DefaultMapScaleBar.ScaleBarMode.SINGLE);
         scaleBar.setDistanceUnitAdapter(new MetricUnitAdapter());
+        scaleBar.setMarginVertical((int) (18 * getResources().getDisplayMetrics().density));
         this.locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
         this.locationManager.removeUpdates(this);
         mapView.addInputListener(new InputListener() {
             @Override
             public void onMoveEvent() {
-                if (isLockedLocation())
-                    lockedLocation = System.currentTimeMillis();
+                // A manual pan/zoom should stop following until the user explicitly
+                // asks to recenter - it must not silently snap back on its own.
+                followingLocation = false;
+                updateLocationButtonVisibility();
             }
             @Override
             public void onZoomEvent() {
@@ -1440,7 +1539,16 @@ public class MainActivity extends Activity implements LocationListener {
     }
 
     @Override
+    protected void onResume() {
+        super.onResume();
+        if (sensorManager != null && rotationVectorSensor != null)
+            sensorManager.registerListener(this, rotationVectorSensor, SensorManager.SENSOR_DELAY_UI);
+    }
+
+    @Override
     protected void onPause() {
+        if (sensorManager != null)
+            sensorManager.unregisterListener(this);
         mapView.getModel().save(this.preferencesFacade);
         this.preferencesFacade.save();
         super.onPause();
@@ -1510,6 +1618,7 @@ public class MainActivity extends Activity implements LocationListener {
         createMapViews();
         createTileCaches();
         createLayers();
+        createSensors();
         createControls();
         setTitle(getClass().getSimpleName());
         registerReceiver(downloadReceiver, new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE));
