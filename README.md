@@ -44,12 +44,38 @@ There are two ways to get the app onto your watch: sideloading over ADB, or usin
 
 * Tap and hold the screen to enter the menu, then download a map of your area (placing the watch on a charger may help with slow download speed). The map menu has a quick shortcut for the United Kingdom at the top, in addition to browsing by continent/country.
 * When the map is downloaded and location is acquired, you'll see the map drawn on screen. Swipe to scroll, and use rotation input (physical bezel, touch bezel, or crown) to zoom in and out.
-* Import a GPX track from ridewithgps.com or pastebin.com. For the moment there is no authorization, so your saved tracks need to be public. You'll need to enter the 8-digit ID from the URL when importing from RideWithGPS, or the last 8 letters of the paste URL for Pastebin.
+* Import a GPX track either by:
+  * Entering it from ridewithgps.com or pastebin.com. For the moment there is no authorization, so your saved tracks need to be public. You'll need to enter the 8-digit ID from the URL when importing from RideWithGPS, or the last 8 letters of the paste URL for Pastebin.
+  * Sharing a `.gpx` file straight from your phone using the **TrailMap Companion** app — see below.
 * Click on a track name to activate it; it will then be shown on the map.
 * Use the compass button on the right to switch between **track-up** (the ring rotates so your direction of travel is always "up") and **north-up** (north stays fixed at the top, and a red pointer shows your current heading) modes.
 * Click the "location" icon on the right to stop the map from centering on your location.
 * Click the "info" icon at the top to toggle the information overlay (clock, battery and track progress).
 * Press the back button to lock/unlock touch input (a "lock" icon appears when touch is disabled). Locking touch input also keeps the screen from dimming, so you can leave it locked during navigation without the screen turning off.
+
+## Sending GPX tracks from your phone (TrailMap Companion)
+
+This fork includes a small **TrailMap Companion** phone app (in the `mobile` module of this project) that lets you send a GPX track straight from your phone's normal Android "Share" menu, instead of hunting down a public RideWithGPS/Pastebin link. It works over the same phone↔watch Bluetooth/WiFi link used for pairing — no internet upload, no computer, no ADB required for this part.
+
+**How it works under the hood:** the companion app registers as a Share target for GPX-like files, and when you share a file to it, it streams the file directly to the watch app using the Wear OS Data Layer (`ChannelClient`) API. A listener service on the watch receives the bytes, saves them as a `.gpx` file next to your other tracks, and refreshes the track list automatically. Because this uses the Data Layer's app-to-app channel, the companion app must be built with the **same package name and signing key** as the watch app (already true if you build both from this repository with default debug signing) — you can't mix a companion app from one signer with a watch app from another.
+
+**Setup:**
+1. Download `trailmap-companion.apk` found in this repository — this is a separate app from `offlinemaps.apk`, meant to be installed on your **phone**, not the watch. (To rebuild it yourself instead: `./gradlew :mobile:assembleDebug`.)
+2. Install it on your phone, e.g. via `adb install trailmap-companion.apk` or by copying it to the phone and opening it (allow installs from unknown sources if prompted).
+3. Make sure your phone and watch are already paired as normal (Wear OS by Google / Galaxy Wearable, etc.) — no extra pairing step is needed for this app, it reuses that existing connection.
+
+Note: if you update `offlinemaps.apk` on the watch, make sure `trailmap-companion.apk` on your phone was built at the same time from this repository — both must share the same package name and signing key for the two apps to talk to each other.
+
+**Sending a track:**
+1. From any app on your phone (Files, Google Drive, email, a browser download, etc.), use **Share** on a `.gpx` file.
+2. Choose **TrailMap Companion** from the share sheet.
+3. The app sends the file to your watch and shows "Sent \<filename\> to \<watch name\>" when done.
+4. On the watch, the track appears in the track list immediately (or the next time you open the tracks menu) — no need to reopen the app.
+
+**Troubleshooting:**
+* *No paired watch found* — open TrailMap Companion directly (not via Share) to see its connection status; make sure the watch is nearby and connected to your phone as usual.
+* *"Failed to send file"* — the watch app must be installed for the listener service to exist; try reopening the watch app once after installing it, then share again.
+* *Track doesn't show up* — confirm the file actually has GPX content; some file managers share generic `application/octet-stream` files that aren't valid GPX, which will fail to parse on the watch.
 
 ## What I've changed in this fork
 
@@ -61,5 +87,6 @@ This is a fork of the original [offlinemaps](https://github.com/miki151/offlinem
 * **Merged screen-dimming control into touch lock** — the old standalone "sun" button was removed; locking touch input now automatically keeps the screen on, and unlocking lets it dim again, which is one less thing to manage mid-hike.
 * **Quick United Kingdom map shortcut** — the map download menu now shows a "United Kingdom" entry with live download status at the top level, instead of needing to dig into the Europe category.
 * **New adaptive app icon** — replaced the old fixed raster launcher icons with a modern adaptive icon (separate foreground/background layers).
+* **TrailMap Companion phone app** — a new `mobile` module that lets you share a GPX file straight from your phone to the watch over the Wear OS Data Layer, instead of only importing by RideWithGPS/Pastebin URL. See "Sending GPX tracks from your phone" above.
 
 This app was made thanks to the awesome Mapsforge library: https://github.com/mapsforge/mapsforge

@@ -53,6 +53,18 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <service
+            android:name=".GpxImportListenerService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.CHANNEL_EVENT" />
+
+                <data
+                    android:scheme="wear"
+                    android:pathPrefix="/gpx-import" />
+            </intent-filter>
+        </service>
     </application>
 
 </manifest>

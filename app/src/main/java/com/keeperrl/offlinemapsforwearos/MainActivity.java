@@ -1248,6 +1248,20 @@ public class MainActivity extends Activity implements LocationListener, SensorEv
         }
     };
 
+    private final BroadcastReceiver gpxImportReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            String name = intent.getStringExtra(GpxImportListenerService.EXTRA_NAME);
+            boolean success = intent.getBooleanExtra(GpxImportListenerService.EXTRA_SUCCESS, false);
+            if (success) {
+                reloadLayers();
+                Toast.makeText(MainActivity.this, "Received " + name + " from phone", Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(MainActivity.this, "Failed to receive GPX track from phone", Toast.LENGTH_SHORT).show();
+            }
+        }
+    };
+
     File getAssetFile(String path) {
         try {
             InputStream stream = getAssets().open(path);
@@ -1623,5 +1637,6 @@ public class MainActivity extends Activity implements LocationListener, SensorEv
         setTitle(getClass().getSimpleName());
         registerReceiver(downloadReceiver, new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE));
         registerReceiver(batteryReceiver, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+        registerReceiver(gpxImportReceiver, new IntentFilter(GpxImportListenerService.ACTION_GPX_IMPORTED));
     }
 }
